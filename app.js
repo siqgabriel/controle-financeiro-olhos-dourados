@@ -1,6 +1,6 @@
 /* ============================================================
    DUPLA FINANCEIRA — app.js
-   Firebase Firestore (compat SDK) + tempo real
+   Firebase Firestore + CRUD completo
    ============================================================ */
 
 // ── FIREBASE CONFIG ────────────────────────────────────────
@@ -26,7 +26,6 @@ const STATE = {
 // ── SYNC BAR ───────────────────────────────────────────────
 function setSyncStatus(status, msg) {
     const bar = document.getElementById('syncBar');
-    const dot = document.getElementById('syncDot');
     const text = document.getElementById('syncMsg');
     bar.className = 'sync-bar ' + status;
     text.textContent = msg;
@@ -47,16 +46,17 @@ function mesLabel(dateStr) {
 }
 function mesKey(dateStr) { return dateStr ? dateStr.slice(0, 7) : ''; }
 function today() { return new Date().toISOString().slice(0, 10); }
-function showToast(msg) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2800);
-}
 function escapeHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 function capitalize(str) { return str.charAt(0).toUpperCase() + str.slice(1); }
+
+function showToast(msg, tipo) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (tipo === 'erro' ? ' toast--erro' : tipo === 'aviso' ? ' toast--aviso' : '');
+    setTimeout(() => t.classList.remove('show'), 3000);
+}
 
 // ── HAMBÚRGUER ─────────────────────────────────────────────
 const hamburger = document.getElementById('hamburger');
@@ -87,12 +87,11 @@ function activateTab(tab) {
     renderAll();
 }
 navBtns.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
-mobileNavBtns.forEach(btn => btn.addEventListener('click', () => {
-    activateTab(btn.dataset.tab);
-    closeMobileMenu();
-}));
+mobileNavBtns.forEach(btn => btn.addEventListener('click', () => { activateTab(btn.dataset.tab); closeMobileMenu(); }));
 
-// ── MODAL ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+//   MODAL CRIAR (múltiplos lançamentos)
+// ══════════════════════════════════════════════════════════
 let rowCount = 0;
 
 function novaLinhaGasto() {
@@ -162,11 +161,9 @@ document.getElementById('modalOverlay').addEventListener('click', e => {
     if (e.target === document.getElementById('modalOverlay')) closeModal();
 });
 
-// ── SALVAR NO FIREBASE ─────────────────────────────────────
 document.getElementById('btnSalvar').addEventListener('click', async () => {
     const rows = document.querySelectorAll('.gasto-row');
     const novos = [];
-
     rows.forEach(row => {
         const id = row.id.replace('row-', '');
         const valor = parseFloat(document.getElementById('valor-' + id)?.value);
@@ -179,89 +176,158 @@ document.getElementById('btnSalvar').addEventListener('click', async () => {
         novos.push({ valor, tipo, desc, pessoa, data: data || today(), boa, criadoEm: firebase.firestore.FieldValue.serverTimestamp() });
     });
 
-    if (novos.length === 0) { showToast('⚠️ Preencha pelo menos um lançamento válido'); return; }
+    if (!novos.length) { showToast('⚠️ Preencha pelo menos um lançamento válido', 'aviso'); return; }
 
     setSyncStatus('saving', 'Salvando…');
-    const btnSalvar = document.getElementById('btnSalvar');
-    btnSalvar.disabled = true;
-    btnSalvar.textContent = 'Salvando…';
+    const btn = document.getElementById('btnSalvar');
+    btn.disabled = true; btn.textContent = 'Salvando…';
 
     try {
-        // Usa batch para salvar múltiplos de uma vez (atômico)
         const batch = db.batch();
-        novos.forEach(l => {
-            const ref = lancamentosRef.doc();
-            batch.set(ref, l);
-        });
+        novos.forEach(l => batch.set(lancamentosRef.doc(), l));
         await batch.commit();
-
         closeModal();
         showToast('✅ ' + novos.length + ' lançamento' + (novos.length > 1 ? 's salvos' : ' salvo') + '!');
-        // O onSnapshot vai atualizar o STATE automaticamente
     } catch (err) {
         console.error(err);
-        setSyncStatus('error', 'Erro ao salvar. Verifique sua conexão.');
-        showToast('❌ Erro ao salvar. Tente novamente.');
+        setSyncStatus('error', 'Erro ao salvar.');
+        showToast('❌ Erro ao salvar. Tente novamente.', 'erro');
     } finally {
-        btnSalvar.disabled = false;
-        btnSalvar.textContent = 'Salvar tudo';
+        btn.disabled = false; btn.textContent = 'Salvar tudo';
+    }
+});
+
+// ══════════════════════════════════════════════════════════
+//   MODAL EDITAR (lançamento único)
+// ══════════════════════════════════════════════════════════
+let editingId = null;
+
+function abrirModalEditar(id) {
+    const lanc = STATE.lancamentos.find(l => l.id === id);
+    if (!lanc) return;
+    editingId = id;
+
+    document.getElementById('edit-valor').value = lanc.valor;
+    document.getElementById('edit-tipo').value = lanc.tipo;
+    document.getElementById('edit-desc').value = lanc.desc;
+    document.getElementById('edit-pessoa').value = lanc.pessoa;
+    document.getElementById('edit-data').value = lanc.data;
+    document.getElementById('edit-boa').checked = lanc.boa || false;
+
+    document.getElementById('modalEditOverlay').classList.add('open');
+}
+
+function closeModalEdit() {
+    document.getElementById('modalEditOverlay').classList.remove('open');
+    editingId = null;
+}
+
+document.getElementById('modalEditClose').addEventListener('click', closeModalEdit);
+document.getElementById('btnEditCancelar').addEventListener('click', closeModalEdit);
+document.getElementById('modalEditOverlay').addEventListener('click', e => {
+    if (e.target === document.getElementById('modalEditOverlay')) closeModalEdit();
+});
+
+document.getElementById('btnEditSalvar').addEventListener('click', async () => {
+    if (!editingId) return;
+
+    const valor = parseFloat(document.getElementById('edit-valor').value);
+    const tipo = document.getElementById('edit-tipo').value;
+    const desc = document.getElementById('edit-desc').value.trim();
+    const pessoa = document.getElementById('edit-pessoa').value;
+    const data = document.getElementById('edit-data').value;
+    const boa = document.getElementById('edit-boa').checked;
+
+    if (!valor || valor <= 0 || !desc) { showToast('⚠️ Preencha todos os campos', 'aviso'); return; }
+
+    setSyncStatus('saving', 'Atualizando…');
+    const btn = document.getElementById('btnEditSalvar');
+    btn.disabled = true; btn.textContent = 'Salvando…';
+
+    try {
+        await lancamentosRef.doc(editingId).update({ valor, tipo, desc, pessoa, data: data || today(), boa, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() });
+        closeModalEdit();
+        showToast('✏️ Lançamento atualizado!');
+    } catch (err) {
+        console.error(err);
+        showToast('❌ Erro ao atualizar.', 'erro');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Salvar alterações';
+    }
+});
+
+// ══════════════════════════════════════════════════════════
+//   MODAL CONFIRMAR EXCLUSÃO
+// ══════════════════════════════════════════════════════════
+let deletingId = null;
+
+function abrirModalDeletar(id) {
+    const lanc = STATE.lancamentos.find(l => l.id === id);
+    if (!lanc) return;
+    deletingId = id;
+    document.getElementById('deleteDesc').textContent = lanc.desc;
+    document.getElementById('deleteValor').textContent = fmt(lanc.valor);
+    document.getElementById('modalDeleteOverlay').classList.add('open');
+}
+
+function closeModalDelete() {
+    document.getElementById('modalDeleteOverlay').classList.remove('open');
+    deletingId = null;
+}
+
+document.getElementById('modalDeleteClose').addEventListener('click', closeModalDelete);
+document.getElementById('btnDeleteCancelar').addEventListener('click', closeModalDelete);
+document.getElementById('modalDeleteOverlay').addEventListener('click', e => {
+    if (e.target === document.getElementById('modalDeleteOverlay')) closeModalDelete();
+});
+
+document.getElementById('btnDeleteConfirmar').addEventListener('click', async () => {
+    if (!deletingId) return;
+    const btn = document.getElementById('btnDeleteConfirmar');
+    btn.disabled = true; btn.textContent = 'Excluindo…';
+
+    try {
+        await lancamentosRef.doc(deletingId).delete();
+        closeModalDelete();
+        showToast('🗑️ Lançamento excluído.');
+    } catch (err) {
+        console.error(err);
+        showToast('❌ Erro ao excluir.', 'erro');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Sim, excluir';
     }
 });
 
 // ── LISTENER EM TEMPO REAL ─────────────────────────────────
-// Fica escutando o Firestore — qualquer mudança (de qualquer dispositivo)
-// atualiza o STATE e re-renderiza a tela automaticamente
 function iniciarListener() {
     setSyncStatus('', 'Conectando ao banco de dados…');
-
-    lancamentosRef
-        .orderBy('criadoEm', 'asc')
-        .onSnapshot(
-            snapshot => {
-                STATE.lancamentos = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    // Normaliza o timestamp para string de data legível
-                    data: doc.data().data || today()
-                }));
-                setSyncStatus('synced', 'Sincronizado · ' + STATE.lancamentos.length + ' lançamento' + (STATE.lancamentos.length !== 1 ? 's' : ''));
-                renderAll();
-            },
-            err => {
-                console.error('Firestore error:', err);
-                setSyncStatus('error', 'Sem conexão com o banco. Dados podem estar desatualizados.');
-            }
-        );
+    lancamentosRef.orderBy('criadoEm', 'asc').onSnapshot(
+        snapshot => {
+            STATE.lancamentos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), data: doc.data().data || today() }));
+            setSyncStatus('synced', 'Sincronizado · ' + STATE.lancamentos.length + ' lançamento' + (STATE.lancamentos.length !== 1 ? 's' : ''));
+            renderAll();
+        },
+        err => {
+            console.error(err);
+            setSyncStatus('error', 'Sem conexão. Dados podem estar desatualizados.');
+        }
+    );
 }
 
 // ── CÁLCULOS ───────────────────────────────────────────────
-function calcSaldo(pessoa) {
-    return STATE.lancamentos.filter(l => l.pessoa === pessoa)
-        .reduce((acc, l) => l.tipo === 'entrada' ? acc + l.valor : acc - l.valor, 0);
-}
-function calcEntradas(pessoa) {
-    return STATE.lancamentos.filter(l => l.pessoa === pessoa && l.tipo === 'entrada')
-        .reduce((acc, l) => acc + l.valor, 0);
-}
-function calcGastos(pessoa) {
-    return STATE.lancamentos.filter(l => l.pessoa === pessoa && l.tipo === 'gasto')
-        .reduce((acc, l) => acc + l.valor, 0);
-}
-function calcBoas(pessoa) {
-    return STATE.lancamentos.filter(l => l.boa && l.pessoa === pessoa).length;
-}
+function calcSaldo(p) { return STATE.lancamentos.filter(l => l.pessoa === p).reduce((a, l) => l.tipo === 'entrada' ? a + l.valor : a - l.valor, 0); }
+function calcEntradas(p) { return STATE.lancamentos.filter(l => l.pessoa === p && l.tipo === 'entrada').reduce((a, l) => a + l.valor, 0); }
+function calcGastos(p) { return STATE.lancamentos.filter(l => l.pessoa === p && l.tipo === 'gasto').reduce((a, l) => a + l.valor, 0); }
+function calcBoas(p) { return STATE.lancamentos.filter(l => l.boa && l.pessoa === p).length; }
 function getMeses() {
-    if (STATE.lancamentos.length === 0) {
+    if (!STATE.lancamentos.length) {
         const now = new Date();
-        return Array.from({ length: 6 }, (_, i) => {
-            const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-            return d.toISOString().slice(0, 7);
-        });
+        return Array.from({ length: 6 }, (_, i) => { const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1); return d.toISOString().slice(0, 7); });
     }
     return [...new Set(STATE.lancamentos.map(l => mesKey(l.data)))].sort();
 }
 
-// ── CHARTS REGISTRY ────────────────────────────────────────
+// ── CHARTS ────────────────────────────────────────────────
 const _charts = {};
 function destroyChart(id) { if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; } }
 function saveChart(id, inst) { _charts[id] = inst; }
@@ -269,46 +335,34 @@ function saveChart(id, inst) { _charts[id] = inst; }
 // ── RENDER HOME ────────────────────────────────────────────
 function renderHome() {
     ['gabriel', 'gustavo', 'conjunto'].forEach(p => {
-        const saldo = calcSaldo(p);
-        const meta = STATE.metas[p] || 3000;
-        const key = capitalize(p);
+        const saldo = calcSaldo(p), meta = STATE.metas[p] || 3000, key = capitalize(p);
         document.getElementById('saldo' + key).textContent = fmt(saldo);
-        const statusEl = document.getElementById('status' + key);
-        if (saldo > 0) { statusEl.textContent = '↑ Positivo'; statusEl.className = 'dash-card-status status-positivo'; }
-        else if (saldo < 0) { statusEl.textContent = '↓ Negativo'; statusEl.className = 'dash-card-status status-negativo'; }
-        else { statusEl.textContent = 'Zerado'; statusEl.className = 'dash-card-status status-neutro'; }
+        const sEl = document.getElementById('status' + key);
+        if (saldo > 0) { sEl.textContent = '↑ Positivo'; sEl.className = 'dash-card-status status-positivo'; }
+        else if (saldo < 0) { sEl.textContent = '↓ Negativo'; sEl.className = 'dash-card-status status-negativo'; }
+        else { sEl.textContent = 'Zerado'; sEl.className = 'dash-card-status status-neutro'; }
         const pct = Math.min(100, Math.max(0, Math.round((calcEntradas(p) / meta) * 100)));
         document.getElementById('meta' + key).textContent = 'Meta: ' + pct + '% atingida';
     });
-
-    const recentes = [...STATE.lancamentos].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 10);
-    renderLancamentos(document.getElementById('listaRecente'), recentes);
+    renderLancamentos(document.getElementById('listaRecente'),
+        [...STATE.lancamentos].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 10));
     renderChartGeral();
     renderChartPizza();
 }
 
 function renderChartGeral() {
-    const ctx = document.getElementById('chartGeral');
-    if (!ctx) return;
+    const ctx = document.getElementById('chartGeral'); if (!ctx) return;
     destroyChart('geral');
     const meses = getMeses();
-    const defs = [
-        { pessoa: 'gabriel', label: 'Gabriel', color: '#1a6cf6' },
-        { pessoa: 'gustavo', label: 'Gustavo', color: '#e0471d' },
-        { pessoa: 'conjunto', label: 'Conjunto', color: '#0f9e6e' }
-    ];
+    const defs = [{ pessoa: 'gabriel', label: 'Gabriel', color: '#1a6cf6' }, { pessoa: 'gustavo', label: 'Gustavo', color: '#e0471d' }, { pessoa: 'conjunto', label: 'Conjunto', color: '#0f9e6e' }];
     saveChart('geral', new Chart(ctx, {
         type: 'line',
         data: {
             labels: meses.map(m => mesLabel(m + '-01')),
             datasets: defs.map(d => ({
                 label: d.label,
-                data: meses.map(m => STATE.lancamentos
-                    .filter(l => l.pessoa === d.pessoa && mesKey(l.data) === m)
-                    .reduce((acc, l) => l.tipo === 'entrada' ? acc + l.valor : acc - l.valor, 0)),
-                borderColor: d.color,
-                backgroundColor: d.color + '20',
-                fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: d.color
+                data: meses.map(m => STATE.lancamentos.filter(l => l.pessoa === d.pessoa && mesKey(l.data) === m).reduce((a, l) => l.tipo === 'entrada' ? a + l.valor : a - l.valor, 0)),
+                borderColor: d.color, backgroundColor: d.color + '20', fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: d.color
             }))
         },
         options: {
@@ -323,74 +377,39 @@ function renderChartGeral() {
 }
 
 function renderChartPizza() {
-    const ctx = document.getElementById('chartPizza');
-    const legendEl = document.getElementById('pizzaLegend');
-    if (!ctx || !legendEl) return;
+    const ctx = document.getElementById('chartPizza'), leg = document.getElementById('pizzaLegend');
+    if (!ctx || !leg) return;
     destroyChart('pizza');
-
-    const gastosG = calcGastos('gabriel');
-    const gastosU = calcGastos('gustavo');
-    const gastosC = calcGastos('conjunto');
-    const total = gastosG + gastosU + gastosC;
-
-    if (total === 0) {
-        legendEl.innerHTML = '<p class="pizza-empty">Nenhum gasto registrado ainda.</p>';
-        ctx.style.display = 'none';
-        return;
-    }
+    const gG = calcGastos('gabriel'), gU = calcGastos('gustavo'), gC = calcGastos('conjunto'), total = gG + gU + gC;
+    if (!total) { leg.innerHTML = '<p class="pizza-empty">Nenhum gasto registrado ainda.</p>'; ctx.style.display = 'none'; return; }
     ctx.style.display = '';
-
-    const labels = ['Gabriel', 'Gustavo', 'Conjunto'];
-    const dados = [gastosG, gastosU, gastosC];
-    const cores = ['#1a6cf6', '#e0471d', '#0f9e6e'];
-
+    const labels = ['Gabriel', 'Gustavo', 'Conjunto'], dados = [gG, gU, gC], cores = ['#1a6cf6', '#e0471d', '#0f9e6e'];
     saveChart('pizza', new Chart(ctx, {
         type: 'doughnut',
-        data: {
-            labels,
-            datasets: [{ data: dados, backgroundColor: cores.map(c => c + 'cc'), borderColor: cores, borderWidth: 2, hoverOffset: 8 }]
-        },
+        data: { labels, datasets: [{ data: dados, backgroundColor: cores.map(c => c + 'cc'), borderColor: cores, borderWidth: 2, hoverOffset: 8 }] },
         options: {
             responsive: true, maintainAspectRatio: false, cutout: '62%',
-            plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: ctx => ' ' + fmt(ctx.raw) + ' (' + ((ctx.raw / total) * 100).toFixed(1) + '%)' } }
-            }
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + fmt(ctx.raw) + ' (' + ((ctx.raw / total) * 100).toFixed(1) + '%)' } } }
         }
     }));
-
-    legendEl.innerHTML = labels.map((l, i) => {
-        if (dados[i] === 0) return '';
-        const pct = ((dados[i] / total) * 100).toFixed(1);
-        return `<div class="pizza-legend-item">
-      <div class="pizza-legend-left"><span class="pizza-dot" style="background:${cores[i]}"></span><span>${l}</span></div>
-      <span class="pizza-legend-val">${fmt(dados[i])} <span style="color:var(--clr-muted);font-weight:400">(${pct}%)</span></span>
-    </div>`;
-    }).filter(Boolean).join('');
+    leg.innerHTML = labels.map((l, i) => { if (!dados[i]) return ''; const pct = ((dados[i] / total) * 100).toFixed(1); return `<div class="pizza-legend-item"><div class="pizza-legend-left"><span class="pizza-dot" style="background:${cores[i]}"></span><span>${l}</span></div><span class="pizza-legend-val">${fmt(dados[i])} <span style="color:var(--clr-muted);font-weight:400">(${pct}%)</span></span></div>`; }).filter(Boolean).join('');
 }
 
 // ── RENDER PESSOA ──────────────────────────────────────────
 function renderPessoa(pessoa) {
     const pfx = pessoa === 'gabriel' ? 'g' : pessoa === 'gustavo' ? 'gu' : 'c';
-    const entradas = calcEntradas(pessoa);
-    const gastos = calcGastos(pessoa);
-    const saldo = calcSaldo(pessoa);
-    const boas = calcBoas(pessoa);
-
+    const entradas = calcEntradas(pessoa), gastos = calcGastos(pessoa), saldo = calcSaldo(pessoa), boas = calcBoas(pessoa);
     document.getElementById(pfx + '-entradas').textContent = fmt(entradas);
     document.getElementById(pfx + '-gastos').textContent = fmt(gastos);
-    const saldoEl = document.getElementById(pfx + '-saldo');
-    saldoEl.textContent = fmt(saldo);
-    saldoEl.className = 'metric-value ' + (saldo >= 0 ? 'green' : 'red');
+    const sEl = document.getElementById(pfx + '-saldo');
+    sEl.textContent = fmt(saldo); sEl.className = 'metric-value ' + (saldo >= 0 ? 'green' : 'red');
     if (pfx !== 'c') document.getElementById(pfx + '-boas').textContent = boas + (boas === 1 ? ' boa' : ' boas');
 
-    const extratoEl = document.getElementById('extrato' + capitalize(pessoa));
-    renderLancamentos(extratoEl, STATE.lancamentos.filter(l => l.pessoa === pessoa).sort((a, b) => b.data.localeCompare(a.data)));
+    renderLancamentos(document.getElementById('extrato' + capitalize(pessoa)),
+        STATE.lancamentos.filter(l => l.pessoa === pessoa).sort((a, b) => b.data.localeCompare(a.data)));
 
-    const meses = getMeses();
-    const color = pessoa === 'gabriel' ? '#1a6cf6' : pessoa === 'gustavo' ? '#e0471d' : '#0f9e6e';
-    const canvasId = 'chart' + capitalize(pessoa);
-    const ctx = document.getElementById(canvasId);
+    const meses = getMeses(), color = pessoa === 'gabriel' ? '#1a6cf6' : pessoa === 'gustavo' ? '#e0471d' : '#0f9e6e';
+    const canvasId = 'chart' + capitalize(pessoa), ctx = document.getElementById(canvasId);
     if (!ctx) return;
     destroyChart(canvasId);
     saveChart(canvasId, new Chart(ctx, {
@@ -413,7 +432,7 @@ function renderPessoa(pessoa) {
     }));
 }
 
-// ── RENDER LANÇAMENTOS ─────────────────────────────────────
+// ── RENDER LANÇAMENTOS (com botões editar/deletar) ─────────
 function renderLancamentos(container, lancs) {
     if (!container) return;
     if (!lancs.length) { container.innerHTML = '<p class="empty-state">Nenhum lançamento ainda.</p>'; return; }
@@ -438,6 +457,10 @@ function renderLancamentos(container, lancs) {
       <div class="lanc-right">
         <span class="lanc-valor ${valClass}">${valSign} ${fmt(l.valor)}</span>
         ${boaBadge}
+        <div class="lanc-actions">
+          <button class="btn-action btn-action--edit" onclick="abrirModalEditar('${l.id}')" title="Editar">✏️</button>
+          <button class="btn-action btn-action--delete" onclick="abrirModalDeletar('${l.id}')" title="Excluir">🗑️</button>
+        </div>
       </div>
     </div>`;
     }).join('');
@@ -445,45 +468,32 @@ function renderLancamentos(container, lancs) {
 
 // ── RENDER RANKING ─────────────────────────────────────────
 function renderRanking() {
-    const boasG = calcBoas('gabriel');
-    const boasU = calcBoas('gustavo');
-    const sorted = [{ nome: 'Gabriel', count: boasG }, { nome: 'Gustavo', count: boasU }].sort((a, b) => b.count - a.count);
-
+    const bG = calcBoas('gabriel'), bU = calcBoas('gustavo');
+    const sorted = [{ nome: 'Gabriel', count: bG }, { nome: 'Gustavo', count: bU }].sort((a, b) => b.count - a.count);
     document.getElementById('rank1-nome').textContent = sorted[0].nome;
     document.getElementById('rank1-count').textContent = sorted[0].count + (sorted[0].count === 1 ? ' boa' : ' boas');
     document.getElementById('rank2-nome').textContent = sorted[1].nome;
     document.getElementById('rank2-count').textContent = sorted[1].count + (sorted[1].count === 1 ? ' boa' : ' boas');
 
-    const meses = getMeses();
-    const mensalEl = document.getElementById('rankingMensal');
-    if (!meses.length || (boasG + boasU === 0)) {
-        mensalEl.innerHTML = '<p class="empty-state">Nenhuma "boa" registrada ainda. Vai lá pagar uma rodada! 🍻</p>';
-    } else {
+    const meses = getMeses(), mensalEl = document.getElementById('rankingMensal');
+    if (!meses.length || (bG + bU === 0)) { mensalEl.innerHTML = '<p class="empty-state">Nenhuma "boa" registrada ainda. Vai lá pagar uma rodada! 🍻</p>'; }
+    else {
         const rows = [...meses].reverse().map(m => {
             const gab = STATE.lancamentos.filter(l => l.boa && l.pessoa === 'gabriel' && mesKey(l.data) === m).length;
             const gus = STATE.lancamentos.filter(l => l.boa && l.pessoa === 'gustavo' && mesKey(l.data) === m).length;
-            if (gab + gus === 0) return '';
+            if (!gab && !gus) return '';
             const winner = gab > gus ? 'Gabriel' : gus > gab ? 'Gustavo' : 'Empate';
-            return `<div class="mes-card">
-        <span class="mes-label">${mesLabel(m + '-01')}</span>
-        <div class="mes-bar-wrap">
-          <span class="mes-bar-item"><span class="mes-dot mes-dot-gabriel"></span>Gabriel: ${gab}</span>
-          <span class="mes-bar-item"><span class="mes-dot mes-dot-gustavo"></span>Gustavo: ${gus}</span>
-        </div>
-        <span class="mes-winner-badge">${winner === 'Empate' ? '🤝 Empate' : '🏆 ' + winner}</span>
-      </div>`;
+            return `<div class="mes-card"><span class="mes-label">${mesLabel(m + '-01')}</span><div class="mes-bar-wrap"><span class="mes-bar-item"><span class="mes-dot mes-dot-gabriel"></span>Gabriel: ${gab}</span><span class="mes-bar-item"><span class="mes-dot mes-dot-gustavo"></span>Gustavo: ${gus}</span></div><span class="mes-winner-badge">${winner === 'Empate' ? '🤝 Empate' : '🏆 ' + winner}</span></div>`;
         }).filter(Boolean).join('');
         mensalEl.innerHTML = rows || '<p class="empty-state">Nenhuma boa nesse período.</p>';
     }
-
     renderLancamentos(document.getElementById('rankingHistorico'),
         STATE.lancamentos.filter(l => l.boa).sort((a, b) => b.data.localeCompare(a.data)));
 }
 
 // ── RENDER ALL ─────────────────────────────────────────────
 function renderAll() {
-    const active = document.querySelector('.page.active');
-    if (!active) return;
+    const active = document.querySelector('.page.active'); if (!active) return;
     const id = active.id;
     if (id === 'page-home') renderHome();
     if (id === 'page-gabriel') renderPessoa('gabriel');

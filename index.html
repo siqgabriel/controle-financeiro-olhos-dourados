@@ -263,6 +263,77 @@
         </div>
     </main>
 
+    <!-- ========== MODAL EDITAR ========== -->
+    <div class="modal-overlay" id="modalEditOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>✏️ Editar Lançamento</h2>
+                <button class="modal-close" id="modalEditClose">✕</button>
+            </div>
+            <div class="gasto-row" style="margin-bottom:0">
+                <div class="gasto-fields">
+                    <div class="field">
+                        <label>Valor (R$)</label>
+                        <input type="number" id="edit-valor" placeholder="0,00" min="0" step="0.01" />
+                    </div>
+                    <div class="field">
+                        <label>Tipo</label>
+                        <select id="edit-tipo">
+                            <option value="gasto">💸 Gasto</option>
+                            <option value="entrada">💰 Entrada / Receita</option>
+                        </select>
+                    </div>
+                    <div class="field field-full">
+                        <label>Descrição</label>
+                        <input type="text" id="edit-desc" placeholder="Descrição do lançamento" />
+                    </div>
+                    <div class="field">
+                        <label>Para quem?</label>
+                        <select id="edit-pessoa">
+                            <option value="gabriel">Gabriel</option>
+                            <option value="gustavo">Gustavo</option>
+                            <option value="conjunto">Conjunto</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Data</label>
+                        <input type="date" id="edit-data" />
+                    </div>
+                </div>
+                <label class="boa-check">
+                    <input type="checkbox" id="edit-boa" />
+                    🍺 Isso conta como uma "boa"!
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-ghost" id="btnEditCancelar">Cancelar</button>
+                <button class="btn-primary" id="btnEditSalvar">Salvar alterações</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== MODAL DELETAR ========== -->
+    <div class="modal-overlay" id="modalDeleteOverlay">
+        <div class="modal modal--delete">
+            <div class="modal-header">
+                <h2>🗑️ Excluir Lançamento</h2>
+                <button class="modal-close" id="modalDeleteClose">✕</button>
+            </div>
+            <div class="delete-confirm-body">
+                <p class="delete-confirm-msg">Tem certeza que quer excluir esse lançamento? Essa ação não pode ser
+                    desfeita.</p>
+                <div class="delete-confirm-card">
+                    <span class="delete-confirm-desc" id="deleteDesc"></span>
+                    <span class="delete-confirm-valor" id="deleteValor"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-ghost" id="btnDeleteCancelar">Cancelar</button>
+                <button class="btn-danger" id="btnDeleteConfirmar">Sim, excluir</button>
+            </div>
+        </div>
+    </div>
+
     <div class="toast" id="toast"></div>
     <script src="app.js"></script>
 </body>
