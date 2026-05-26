@@ -16,326 +16,370 @@
     <!-- Firebase SDK via CDN (compat mode — funciona sem bundler) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 </head>
 
 <body>
 
-    <!-- HEADER -->
-    <header class="header">
-        <div class="header-inner">
-            <div class="logo">
-                <span class="logo-icon">💰</span>
-                <span class="logo-text">Dupla<strong>Financeira</strong></span>
+    <!-- ========== TELA DE LOGIN ========== -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <div class="login-logo">
+                <span class="login-logo-icon">💰</span>
+                <h1 class="login-title">Dupla<strong>Financeira</strong></h1>
             </div>
-            <button class="hamburger" id="hamburger" aria-label="Abrir menu">
-                <span></span><span></span><span></span>
-            </button>
-            <nav class="nav" id="mainNav">
-                <button class="nav-btn active" data-tab="home">Home</button>
-                <button class="nav-btn" data-tab="gabriel">Gabriel</button>
-                <button class="nav-btn" data-tab="gustavo">Gustavo</button>
-                <button class="nav-btn" data-tab="conjuntos">Conjuntos</button>
-                <button class="nav-btn nav-btn--fun" data-tab="ranking">🏆 Quem fez a boa?</button>
-            </nav>
-        </div>
-        <div class="mobile-menu" id="mobileMenu">
-            <button class="mobile-nav-btn active" data-tab="home">🏠 Home</button>
-            <button class="mobile-nav-btn" data-tab="gabriel">👤 Gabriel</button>
-            <button class="mobile-nav-btn" data-tab="gustavo">👤 Gustavo</button>
-            <button class="mobile-nav-btn" data-tab="conjuntos">🤝 Gastos Conjuntos</button>
-            <button class="mobile-nav-btn mobile-nav-btn--fun" data-tab="ranking">🏆 Quem fez a boa?</button>
-        </div>
-    </header>
-    <div class="mobile-menu-overlay" id="mobileOverlay"></div>
+            <p class="login-subtitle">Controle financeiro de Gabriel & Gustavo</p>
 
-    <!-- Indicador de conexão -->
-    <div class="sync-bar" id="syncBar">
-        <span class="sync-dot" id="syncDot"></span>
-        <span id="syncMsg">Conectando ao banco de dados…</span>
+            <div class="login-form">
+                <div class="field">
+                    <label>E-mail</label>
+                    <input type="email" id="loginEmail" placeholder="seu@email.com" autocomplete="email" />
+                </div>
+                <div class="field" style="margin-top:12px">
+                    <label>Senha</label>
+                    <div class="password-wrap">
+                        <input type="password" id="loginSenha" placeholder="••••••••" autocomplete="current-password" />
+                        <button class="btn-show-pass" id="btnShowPass" type="button"
+                            aria-label="Mostrar senha">👁</button>
+                    </div>
+                </div>
+                <div class="login-error" id="loginError"></div>
+                <button class="btn-login" id="btnLogin">Entrar</button>
+            </div>
+
+            <p class="login-footer">Esqueceu a senha? Peça pro Gabriel resetar no Firebase 😄</p>
+        </div>
     </div>
 
-    <!-- ========== HOME ========== -->
-    <main id="page-home" class="page active">
-        <div class="container">
-            <div class="page-title-row">
-                <h1 class="page-title">Visão Geral</h1>
-                <button class="btn-primary" id="btnAddCusto">+ Adicionar Gastos</button>
-            </div>
+    <!-- ========== APP (oculto até login) ========== -->
+    <div id="appWrapper" style="display:none">
 
-            <!-- MODAL ADD CUSTO -->
-            <div class="modal-overlay" id="modalOverlay">
-                <div class="modal" id="modalAddCusto">
-                    <div class="modal-header">
-                        <h2>Registrar Gastos</h2>
-                        <button class="modal-close" id="modalClose">✕</button>
+        <!-- HEADER -->
+        <header class="header">
+            <div class="header-inner">
+                <div class="logo">
+                    <span class="logo-icon">💰</span>
+                    <span class="logo-text">Dupla<strong>Financeira</strong></span>
+                </div>
+                <button class="hamburger" id="hamburger" aria-label="Abrir menu">
+                    <span></span><span></span><span></span>
+                </button>
+                <nav class="nav" id="mainNav">
+                    <button class="nav-btn active" data-tab="home">Home</button>
+                    <button class="nav-btn" data-tab="gabriel">Gabriel</button>
+                    <button class="nav-btn" data-tab="gustavo">Gustavo</button>
+                    <button class="nav-btn" data-tab="conjuntos">Conjuntos</button>
+                    <button class="nav-btn nav-btn--fun" data-tab="ranking">🏆 Quem fez a boa?</button>
+                    <div class="nav-user">
+                        <span class="nav-user-name" id="navUserName"></span>
+                        <button class="btn-logout" id="btnLogout" title="Sair">Sair</button>
                     </div>
-                    <div id="gastosList"></div>
-                    <button class="btn-secondary" id="btnAddLinha">+ Adicionar mais um gasto</button>
-                    <div class="modal-footer">
-                        <button class="btn-ghost" id="btnCancelar">Cancelar</button>
-                        <button class="btn-primary" id="btnSalvar">Salvar tudo</button>
-                    </div>
+                </nav>
+            </div>
+            <div class="mobile-menu" id="mobileMenu">
+                <button class="mobile-nav-btn active" data-tab="home">🏠 Home</button>
+                <button class="mobile-nav-btn" data-tab="gabriel">👤 Gabriel</button>
+                <button class="mobile-nav-btn" data-tab="gustavo">👤 Gustavo</button>
+                <button class="mobile-nav-btn" data-tab="conjuntos">🤝 Gastos Conjuntos</button>
+                <button class="mobile-nav-btn mobile-nav-btn--fun" data-tab="ranking">🏆 Quem fez a boa?</button>
+                <div class="mobile-user-row">
+                    <span class="mobile-user-name" id="mobileUserName"></span>
+                    <button class="btn-logout-mobile" id="btnLogoutMobile">Sair 👋</button>
                 </div>
             </div>
+        </header>
+        <div class="mobile-menu-overlay" id="mobileOverlay"></div>
 
-            <!-- DASHBOARD -->
-            <div class="dashboard-grid">
-                <div class="dash-card dash-card--gabriel">
-                    <div class="dash-card-label">Gabriel</div>
-                    <div class="dash-card-value" id="saldoGabriel">R$ 0,00</div>
-                    <div class="dash-card-status" id="statusGabriel">—</div>
-                    <div class="dash-card-meta" id="metaGabriel"></div>
-                </div>
-                <div class="dash-card dash-card--gustavo">
-                    <div class="dash-card-label">Gustavo</div>
-                    <div class="dash-card-value" id="saldoGustavo">R$ 0,00</div>
-                    <div class="dash-card-status" id="statusGustavo">—</div>
-                    <div class="dash-card-meta" id="metaGustavo"></div>
-                </div>
-                <div class="dash-card dash-card--conjunto">
-                    <div class="dash-card-label">Conjuntos</div>
-                    <div class="dash-card-value" id="saldoConjunto">R$ 0,00</div>
-                    <div class="dash-card-status" id="statusConjunto">—</div>
-                    <div class="dash-card-meta" id="metaConjunto"></div>
-                </div>
-            </div>
+        <!-- Indicador de conexão -->
+        <div class="sync-bar" id="syncBar">
+            <span class="sync-dot" id="syncDot"></span>
+            <span id="syncMsg">Conectando ao banco de dados…</span>
+        </div>
 
-            <!-- GRÁFICOS -->
-            <div class="charts-home-grid">
-                <div class="chart-section">
-                    <div class="chart-header">
-                        <h2>Evolução Financeira</h2>
-                        <div class="chart-legend">
-                            <span class="legend-dot legend-dot--gabriel"></span>Gabriel
-                            <span class="legend-dot legend-dot--gustavo"></span>Gustavo
-                            <span class="legend-dot legend-dot--conjunto"></span>Conjunto
+        <!-- ========== HOME ========== -->
+        <main id="page-home" class="page active">
+            <div class="container">
+                <div class="page-title-row">
+                    <h1 class="page-title">Visão Geral</h1>
+                    <button class="btn-primary" id="btnAddCusto">+ Adicionar Gastos</button>
+                </div>
+
+                <!-- MODAL ADD CUSTO -->
+                <div class="modal-overlay" id="modalOverlay">
+                    <div class="modal" id="modalAddCusto">
+                        <div class="modal-header">
+                            <h2>Registrar Gastos</h2>
+                            <button class="modal-close" id="modalClose">✕</button>
+                        </div>
+                        <div id="gastosList"></div>
+                        <button class="btn-secondary" id="btnAddLinha">+ Adicionar mais um gasto</button>
+                        <div class="modal-footer">
+                            <button class="btn-ghost" id="btnCancelar">Cancelar</button>
+                            <button class="btn-primary" id="btnSalvar">Salvar tudo</button>
                         </div>
                     </div>
-                    <div class="chart-wrap"><canvas id="chartGeral"></canvas></div>
                 </div>
-                <div class="chart-section chart-section--pizza">
-                    <div class="chart-header">
-                        <h2>Distribuição de Gastos</h2>
+
+                <!-- DASHBOARD -->
+                <div class="dashboard-grid">
+                    <div class="dash-card dash-card--gabriel">
+                        <div class="dash-card-label">Gabriel</div>
+                        <div class="dash-card-value" id="saldoGabriel">R$ 0,00</div>
+                        <div class="dash-card-status" id="statusGabriel">—</div>
+                        <div class="dash-card-meta" id="metaGabriel"></div>
                     </div>
-                    <div class="chart-wrap chart-wrap--pizza"><canvas id="chartPizza"></canvas></div>
-                    <div class="pizza-legend" id="pizzaLegend"></div>
-                </div>
-            </div>
-
-            <!-- LANÇAMENTOS RECENTES -->
-            <div class="recent-section">
-                <h2>Lançamentos Recentes</h2>
-                <div id="listaRecente" class="lancamentos-list">
-                    <p class="empty-state">Nenhum lançamento ainda. Adicione seu primeiro gasto!</p>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- ========== GABRIEL ========== -->
-    <main id="page-gabriel" class="page">
-        <div class="container">
-            <div class="page-title-row">
-                <h1 class="page-title">Gabriel</h1>
-                <div class="person-badge person-badge--gabriel">Minha Conta</div>
-            </div>
-            <div class="person-summary-grid">
-                <div class="metric-card">
-                    <div class="metric-label">Total Entradas</div>
-                    <div class="metric-value green" id="g-entradas">R$ 0,00</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Total Gastos</div>
-                    <div class="metric-value red" id="g-gastos">R$ 0,00</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Saldo</div>
-                    <div class="metric-value" id="g-saldo">R$ 0,00</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Boas Feitas</div>
-                    <div class="metric-value fun" id="g-boas">0</div>
-                </div>
-            </div>
-            <div class="chart-wrap" style="margin:2rem 0"><canvas id="chartGabriel"></canvas></div>
-            <h2 style="margin-bottom:1rem;font-family:var(--font-display);font-weight:700">Extrato</h2>
-            <div id="extratoGabriel" class="lancamentos-list">
-                <p class="empty-state">Sem lançamentos para Gabriel.</p>
-            </div>
-        </div>
-    </main>
-
-    <!-- ========== GUSTAVO ========== -->
-    <main id="page-gustavo" class="page">
-        <div class="container">
-            <div class="page-title-row">
-                <h1 class="page-title">Gustavo</h1>
-                <div class="person-badge person-badge--gustavo">Conta do Gustavo</div>
-            </div>
-            <div class="person-summary-grid">
-                <div class="metric-card">
-                    <div class="metric-label">Total Entradas</div>
-                    <div class="metric-value green" id="gu-entradas">R$ 0,00</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Total Gastos</div>
-                    <div class="metric-value red" id="gu-gastos">R$ 0,00</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Saldo</div>
-                    <div class="metric-value" id="gu-saldo">R$ 0,00</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Boas Feitas</div>
-                    <div class="metric-value fun" id="gu-boas">0</div>
-                </div>
-            </div>
-            <div class="chart-wrap" style="margin:2rem 0"><canvas id="chartGustavo"></canvas></div>
-            <h2 style="margin-bottom:1rem;font-family:var(--font-display);font-weight:700">Extrato</h2>
-            <div id="extratoGustavo" class="lancamentos-list">
-                <p class="empty-state">Sem lançamentos para Gustavo.</p>
-            </div>
-        </div>
-    </main>
-
-    <!-- ========== CONJUNTOS ========== -->
-    <main id="page-conjuntos" class="page">
-        <div class="container">
-            <div class="page-title-row">
-                <h1 class="page-title">Gastos Conjuntos</h1>
-                <div class="person-badge person-badge--conjunto">Os dois juntos</div>
-            </div>
-            <div class="person-summary-grid">
-                <div class="metric-card">
-                    <div class="metric-label">Total Entradas</div>
-                    <div class="metric-value green" id="c-entradas">R$ 0,00</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Total Gastos</div>
-                    <div class="metric-value red" id="c-gastos">R$ 0,00</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Saldo</div>
-                    <div class="metric-value" id="c-saldo">R$ 0,00</div>
-                </div>
-            </div>
-            <div class="chart-wrap" style="margin:2rem 0"><canvas id="chartConjunto"></canvas></div>
-            <h2 style="margin-bottom:1rem;font-family:var(--font-display);font-weight:700">Extrato</h2>
-            <div id="extratoConjunto" class="lancamentos-list">
-                <p class="empty-state">Sem lançamentos conjuntos.</p>
-            </div>
-        </div>
-    </main>
-
-    <!-- ========== RANKING ========== -->
-    <main id="page-ranking" class="page">
-        <div class="container">
-            <div class="page-title-row">
-                <h1 class="page-title">🏆 Quem Fez a Boa?</h1>
-            </div>
-            <p class="ranking-subtitle">Aqui conta quem mais tratou o outro. Não tem relação com o saldo — é só
-                reconhecimento mesmo 🍺</p>
-            <div class="ranking-podium">
-                <div class="podium-card" id="podium-1">
-                    <div class="podium-crown">👑</div>
-                    <div class="podium-name" id="rank1-nome">—</div>
-                    <div class="podium-count" id="rank1-count">0 boas</div>
-                    <div class="podium-bar podium-bar--1"></div>
-                </div>
-                <div class="podium-card podium-card--2" id="podium-2">
-                    <div class="podium-name" id="rank2-nome">—</div>
-                    <div class="podium-count" id="rank2-count">0 boas</div>
-                    <div class="podium-bar podium-bar--2"></div>
-                </div>
-            </div>
-            <div class="ranking-detalhe">
-                <h2>Detalhamento Mensal</h2>
-                <div id="rankingMensal" class="ranking-mensal-list">
-                    <p class="empty-state">Nenhuma "boa" registrada ainda. Vai lá pagar uma rodada! 🍻</p>
-                </div>
-            </div>
-            <div class="ranking-historico">
-                <h2>Histórico de Boas</h2>
-                <div id="rankingHistorico" class="lancamentos-list">
-                    <p class="empty-state">Sem registros de boas ainda.</p>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- ========== MODAL EDITAR ========== -->
-    <div class="modal-overlay" id="modalEditOverlay">
-        <div class="modal">
-            <div class="modal-header">
-                <h2>✏️ Editar Lançamento</h2>
-                <button class="modal-close" id="modalEditClose">✕</button>
-            </div>
-            <div class="gasto-row" style="margin-bottom:0">
-                <div class="gasto-fields">
-                    <div class="field">
-                        <label>Valor (R$)</label>
-                        <input type="number" id="edit-valor" placeholder="0,00" min="0" step="0.01" />
+                    <div class="dash-card dash-card--gustavo">
+                        <div class="dash-card-label">Gustavo</div>
+                        <div class="dash-card-value" id="saldoGustavo">R$ 0,00</div>
+                        <div class="dash-card-status" id="statusGustavo">—</div>
+                        <div class="dash-card-meta" id="metaGustavo"></div>
                     </div>
-                    <div class="field">
-                        <label>Tipo</label>
-                        <select id="edit-tipo">
-                            <option value="gasto">💸 Gasto</option>
-                            <option value="entrada">💰 Entrada / Receita</option>
-                        </select>
-                    </div>
-                    <div class="field field-full">
-                        <label>Descrição</label>
-                        <input type="text" id="edit-desc" placeholder="Descrição do lançamento" />
-                    </div>
-                    <div class="field">
-                        <label>Para quem?</label>
-                        <select id="edit-pessoa">
-                            <option value="gabriel">Gabriel</option>
-                            <option value="gustavo">Gustavo</option>
-                            <option value="conjunto">Conjunto</option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label>Data</label>
-                        <input type="date" id="edit-data" />
+                    <div class="dash-card dash-card--conjunto">
+                        <div class="dash-card-label">Conjuntos</div>
+                        <div class="dash-card-value" id="saldoConjunto">R$ 0,00</div>
+                        <div class="dash-card-status" id="statusConjunto">—</div>
+                        <div class="dash-card-meta" id="metaConjunto"></div>
                     </div>
                 </div>
-                <label class="boa-check">
-                    <input type="checkbox" id="edit-boa" />
-                    🍺 Isso conta como uma "boa"!
-                </label>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-ghost" id="btnEditCancelar">Cancelar</button>
-                <button class="btn-primary" id="btnEditSalvar">Salvar alterações</button>
-            </div>
-        </div>
-    </div>
 
-    <!-- ========== MODAL DELETAR ========== -->
-    <div class="modal-overlay" id="modalDeleteOverlay">
-        <div class="modal modal--delete">
-            <div class="modal-header">
-                <h2>🗑️ Excluir Lançamento</h2>
-                <button class="modal-close" id="modalDeleteClose">✕</button>
-            </div>
-            <div class="delete-confirm-body">
-                <p class="delete-confirm-msg">Tem certeza que quer excluir esse lançamento? Essa ação não pode ser
-                    desfeita.</p>
-                <div class="delete-confirm-card">
-                    <span class="delete-confirm-desc" id="deleteDesc"></span>
-                    <span class="delete-confirm-valor" id="deleteValor"></span>
+                <!-- GRÁFICOS -->
+                <div class="charts-home-grid">
+                    <div class="chart-section">
+                        <div class="chart-header">
+                            <h2>Evolução Financeira</h2>
+                            <div class="chart-legend">
+                                <span class="legend-dot legend-dot--gabriel"></span>Gabriel
+                                <span class="legend-dot legend-dot--gustavo"></span>Gustavo
+                                <span class="legend-dot legend-dot--conjunto"></span>Conjunto
+                            </div>
+                        </div>
+                        <div class="chart-wrap"><canvas id="chartGeral"></canvas></div>
+                    </div>
+                    <div class="chart-section chart-section--pizza">
+                        <div class="chart-header">
+                            <h2>Distribuição de Gastos</h2>
+                        </div>
+                        <div class="chart-wrap chart-wrap--pizza"><canvas id="chartPizza"></canvas></div>
+                        <div class="pizza-legend" id="pizzaLegend"></div>
+                    </div>
+                </div>
+
+                <!-- LANÇAMENTOS RECENTES -->
+                <div class="recent-section">
+                    <h2>Lançamentos Recentes</h2>
+                    <div id="listaRecente" class="lancamentos-list">
+                        <p class="empty-state">Nenhum lançamento ainda. Adicione seu primeiro gasto!</p>
+                    </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn-ghost" id="btnDeleteCancelar">Cancelar</button>
-                <button class="btn-danger" id="btnDeleteConfirmar">Sim, excluir</button>
+        </main>
+
+        <!-- ========== GABRIEL ========== -->
+        <main id="page-gabriel" class="page">
+            <div class="container">
+                <div class="page-title-row">
+                    <h1 class="page-title">Gabriel</h1>
+                    <div class="person-badge person-badge--gabriel">Minha Conta</div>
+                </div>
+                <div class="person-summary-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Total Entradas</div>
+                        <div class="metric-value green" id="g-entradas">R$ 0,00</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Total Gastos</div>
+                        <div class="metric-value red" id="g-gastos">R$ 0,00</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Saldo</div>
+                        <div class="metric-value" id="g-saldo">R$ 0,00</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Boas Feitas</div>
+                        <div class="metric-value fun" id="g-boas">0</div>
+                    </div>
+                </div>
+                <div class="chart-wrap" style="margin:2rem 0"><canvas id="chartGabriel"></canvas></div>
+                <h2 style="margin-bottom:1rem;font-family:var(--font-display);font-weight:700">Extrato</h2>
+                <div id="extratoGabriel" class="lancamentos-list">
+                    <p class="empty-state">Sem lançamentos para Gabriel.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- ========== GUSTAVO ========== -->
+        <main id="page-gustavo" class="page">
+            <div class="container">
+                <div class="page-title-row">
+                    <h1 class="page-title">Gustavo</h1>
+                    <div class="person-badge person-badge--gustavo">Conta do Gustavo</div>
+                </div>
+                <div class="person-summary-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Total Entradas</div>
+                        <div class="metric-value green" id="gu-entradas">R$ 0,00</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Total Gastos</div>
+                        <div class="metric-value red" id="gu-gastos">R$ 0,00</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Saldo</div>
+                        <div class="metric-value" id="gu-saldo">R$ 0,00</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Boas Feitas</div>
+                        <div class="metric-value fun" id="gu-boas">0</div>
+                    </div>
+                </div>
+                <div class="chart-wrap" style="margin:2rem 0"><canvas id="chartGustavo"></canvas></div>
+                <h2 style="margin-bottom:1rem;font-family:var(--font-display);font-weight:700">Extrato</h2>
+                <div id="extratoGustavo" class="lancamentos-list">
+                    <p class="empty-state">Sem lançamentos para Gustavo.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- ========== CONJUNTOS ========== -->
+        <main id="page-conjuntos" class="page">
+            <div class="container">
+                <div class="page-title-row">
+                    <h1 class="page-title">Gastos Conjuntos</h1>
+                    <div class="person-badge person-badge--conjunto">Os dois juntos</div>
+                </div>
+                <div class="person-summary-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Total Entradas</div>
+                        <div class="metric-value green" id="c-entradas">R$ 0,00</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Total Gastos</div>
+                        <div class="metric-value red" id="c-gastos">R$ 0,00</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Saldo</div>
+                        <div class="metric-value" id="c-saldo">R$ 0,00</div>
+                    </div>
+                </div>
+                <div class="chart-wrap" style="margin:2rem 0"><canvas id="chartConjunto"></canvas></div>
+                <h2 style="margin-bottom:1rem;font-family:var(--font-display);font-weight:700">Extrato</h2>
+                <div id="extratoConjunto" class="lancamentos-list">
+                    <p class="empty-state">Sem lançamentos conjuntos.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- ========== RANKING ========== -->
+        <main id="page-ranking" class="page">
+            <div class="container">
+                <div class="page-title-row">
+                    <h1 class="page-title">🏆 Quem Fez a Boa?</h1>
+                </div>
+                <p class="ranking-subtitle">Aqui conta quem mais tratou o outro. Não tem relação com o saldo — é só
+                    reconhecimento mesmo 🍺</p>
+                <div class="ranking-podium">
+                    <div class="podium-card" id="podium-1">
+                        <div class="podium-crown">👑</div>
+                        <div class="podium-name" id="rank1-nome">—</div>
+                        <div class="podium-count" id="rank1-count">0 boas</div>
+                        <div class="podium-bar podium-bar--1"></div>
+                    </div>
+                    <div class="podium-card podium-card--2" id="podium-2">
+                        <div class="podium-name" id="rank2-nome">—</div>
+                        <div class="podium-count" id="rank2-count">0 boas</div>
+                        <div class="podium-bar podium-bar--2"></div>
+                    </div>
+                </div>
+                <div class="ranking-detalhe">
+                    <h2>Detalhamento Mensal</h2>
+                    <div id="rankingMensal" class="ranking-mensal-list">
+                        <p class="empty-state">Nenhuma "boa" registrada ainda. Vai lá pagar uma rodada! 🍻</p>
+                    </div>
+                </div>
+                <div class="ranking-historico">
+                    <h2>Histórico de Boas</h2>
+                    <div id="rankingHistorico" class="lancamentos-list">
+                        <p class="empty-state">Sem registros de boas ainda.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- ========== MODAL EDITAR ========== -->
+        <div class="modal-overlay" id="modalEditOverlay">
+            <div class="modal">
+                <div class="modal-header">
+                    <h2>✏️ Editar Lançamento</h2>
+                    <button class="modal-close" id="modalEditClose">✕</button>
+                </div>
+                <div class="gasto-row" style="margin-bottom:0">
+                    <div class="gasto-fields">
+                        <div class="field">
+                            <label>Valor (R$)</label>
+                            <input type="number" id="edit-valor" placeholder="0,00" min="0" step="0.01" />
+                        </div>
+                        <div class="field">
+                            <label>Tipo</label>
+                            <select id="edit-tipo">
+                                <option value="gasto">💸 Gasto</option>
+                                <option value="entrada">💰 Entrada / Receita</option>
+                            </select>
+                        </div>
+                        <div class="field field-full">
+                            <label>Descrição</label>
+                            <input type="text" id="edit-desc" placeholder="Descrição do lançamento" />
+                        </div>
+                        <div class="field">
+                            <label>Para quem?</label>
+                            <select id="edit-pessoa">
+                                <option value="gabriel">Gabriel</option>
+                                <option value="gustavo">Gustavo</option>
+                                <option value="conjunto">Conjunto</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>Data</label>
+                            <input type="date" id="edit-data" />
+                        </div>
+                    </div>
+                    <label class="boa-check">
+                        <input type="checkbox" id="edit-boa" />
+                        🍺 Isso conta como uma "boa"!
+                    </label>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-ghost" id="btnEditCancelar">Cancelar</button>
+                    <button class="btn-primary" id="btnEditSalvar">Salvar alterações</button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="toast" id="toast"></div>
-    <script src="app.js"></script>
+        <!-- ========== MODAL DELETAR ========== -->
+        <div class="modal-overlay" id="modalDeleteOverlay">
+            <div class="modal modal--delete">
+                <div class="modal-header">
+                    <h2>🗑️ Excluir Lançamento</h2>
+                    <button class="modal-close" id="modalDeleteClose">✕</button>
+                </div>
+                <div class="delete-confirm-body">
+                    <p class="delete-confirm-msg">Tem certeza que quer excluir esse lançamento? Essa ação não pode ser
+                        desfeita.</p>
+                    <div class="delete-confirm-card">
+                        <span class="delete-confirm-desc" id="deleteDesc"></span>
+                        <span class="delete-confirm-valor" id="deleteValor"></span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-ghost" id="btnDeleteCancelar">Cancelar</button>
+                    <button class="btn-danger" id="btnDeleteConfirmar">Sim, excluir</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="toast" id="toast"></div>
+        <script src="app.js"></script>
+
+    </div><!-- /appWrapper -->
 </body>
 
 </html>

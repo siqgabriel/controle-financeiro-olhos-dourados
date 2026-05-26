@@ -15,6 +15,7 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const auth = firebase.auth();
 const lancamentosRef = db.collection('lancamentos');
 
 // ── STATE ──────────────────────────────────────────────────
@@ -301,7 +302,7 @@ document.getElementById('btnDeleteConfirmar').addEventListener('click', async ()
 // ── LISTENER EM TEMPO REAL ─────────────────────────────────
 function iniciarListener() {
     setSyncStatus('', 'Conectando ao banco de dados…');
-    lancamentosRef.orderBy('criadoEm', 'asc').onSnapshot(
+    listenerUnsubscribe = lancamentosRef.orderBy('criadoEm', 'asc').onSnapshot(
         snapshot => {
             STATE.lancamentos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), data: doc.data().data || today() }));
             setSyncStatus('synced', 'Sincronizado · ' + STATE.lancamentos.length + ' lançamento' + (STATE.lancamentos.length !== 1 ? 's' : ''));
@@ -502,5 +503,89 @@ function renderAll() {
     if (id === 'page-ranking') renderRanking();
 }
 
+// ── AUTENTICAÇÃO ───────────────────────────────────────────
+const NOMES = {
+    'gabriel@duplafinanceira.com': 'Gabriel',
+    'gustavo@duplafinanceira.com': 'Gustavo'
+};
+
+let listenerUnsubscribe = null; // guarda referência para cancelar o listener ao fazer logout
+
+// Controla qual tela mostrar
+auth.onAuthStateChanged(user => {
+    if (user) {
+        // Logado — mostra o app
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('appWrapper').style.display = 'block';
+
+        const nome = NOMES[user.email] || user.email;
+        document.getElementById('navUserName').textContent = '👋 ' + nome;
+        document.getElementById('mobileUserName').textContent = '👋 ' + nome;
+
+        // Inicia listener do Firestore só após login
+        if (!listenerUnsubscribe) iniciarListener();
+    } else {
+        // Deslogado — mostra tela de login e cancela listener
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.getElementById('appWrapper').style.display = 'none';
+        if (listenerUnsubscribe) { listenerUnsubscribe(); listenerUnsubscribe = null; }
+        STATE.lancamentos = [];
+    }
+});
+
+// ── TELA DE LOGIN ──────────────────────────────────────────
+const loginEmailEl = document.getElementById('loginEmail');
+const loginSenhaEl = document.getElementById('loginSenha');
+const loginErrorEl = document.getElementById('loginError');
+
+document.getElementById('btnShowPass').addEventListener('click', () => {
+    const input = loginSenhaEl;
+    input.type = input.type === 'password' ? 'text' : 'password';
+});
+
+// Login ao pressionar Enter em qualquer campo
+[loginEmailEl, loginSenhaEl].forEach(el => {
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(); });
+});
+
+document.getElementById('btnLogin').addEventListener('click', fazerLogin);
+
+async function fazerLogin() {
+    const email = loginEmailEl.value.trim();
+    const senha = loginSenhaEl.value;
+    loginErrorEl.textContent = '';
+
+    if (!email || !senha) { loginErrorEl.textContent = 'Preencha e-mail e senha.'; return; }
+
+    const btn = document.getElementById('btnLogin');
+    btn.disabled = true; btn.textContent = 'Entrando…';
+
+    try {
+        await auth.signInWithEmailAndPassword(email, senha);
+        // onAuthStateChanged cuida do resto
+    } catch (err) {
+        const msgs = {
+            'auth/user-not-found': 'E-mail não encontrado.',
+            'auth/wrong-password': 'Senha incorreta.',
+            'auth/invalid-email': 'E-mail inválido.',
+            'auth/invalid-credential': 'E-mail ou senha incorretos.',
+            'auth/too-many-requests': 'Muitas tentativas. Tente novamente mais tarde.'
+        };
+        loginErrorEl.textContent = msgs[err.code] || 'Erro ao entrar. Tente novamente.';
+    } finally {
+        btn.disabled = false; btn.textContent = 'Entrar';
+    }
+}
+
+// ── LOGOUT ─────────────────────────────────────────────────
+async function fazerLogout() {
+    await auth.signOut();
+    loginEmailEl.value = '';
+    loginSenhaEl.value = '';
+}
+
+document.getElementById('btnLogout').addEventListener('click', fazerLogout);
+document.getElementById('btnLogoutMobile').addEventListener('click', () => { fazerLogout(); closeMobileMenu(); });
+
 // ── INIT ───────────────────────────────────────────────────
-iniciarListener();
+// (auth.onAuthStateChanged já cuida de iniciar o listener quando logado)
