@@ -12,6 +12,10 @@
         href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap"
         rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <!-- Firebase SDK via CDN (compat mode — funciona sem bundler) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 
 <body>
@@ -23,13 +27,9 @@
                 <span class="logo-icon">💰</span>
                 <span class="logo-text">Dupla<strong>Financeira</strong></span>
             </div>
-
-            <!-- Botão hambúrguer (só aparece no mobile) -->
             <button class="hamburger" id="hamburger" aria-label="Abrir menu">
                 <span></span><span></span><span></span>
             </button>
-
-            <!-- Nav desktop -->
             <nav class="nav" id="mainNav">
                 <button class="nav-btn active" data-tab="home">Home</button>
                 <button class="nav-btn" data-tab="gabriel">Gabriel</button>
@@ -38,8 +38,6 @@
                 <button class="nav-btn nav-btn--fun" data-tab="ranking">🏆 Quem fez a boa?</button>
             </nav>
         </div>
-
-        <!-- Drawer mobile -->
         <div class="mobile-menu" id="mobileMenu">
             <button class="mobile-nav-btn active" data-tab="home">🏠 Home</button>
             <button class="mobile-nav-btn" data-tab="gabriel">👤 Gabriel</button>
@@ -48,9 +46,13 @@
             <button class="mobile-nav-btn mobile-nav-btn--fun" data-tab="ranking">🏆 Quem fez a boa?</button>
         </div>
     </header>
-
-    <!-- Overlay mobile menu -->
     <div class="mobile-menu-overlay" id="mobileOverlay"></div>
+
+    <!-- Indicador de conexão -->
+    <div class="sync-bar" id="syncBar">
+        <span class="sync-dot" id="syncDot"></span>
+        <span id="syncMsg">Conectando ao banco de dados…</span>
+    </div>
 
     <!-- ========== HOME ========== -->
     <main id="page-home" class="page active">
@@ -76,7 +78,7 @@
                 </div>
             </div>
 
-            <!-- DASHBOARD GERAL -->
+            <!-- DASHBOARD -->
             <div class="dashboard-grid">
                 <div class="dash-card dash-card--gabriel">
                     <div class="dash-card-label">Gabriel</div>
@@ -98,10 +100,8 @@
                 </div>
             </div>
 
-            <!-- GRÁFICOS HOME: linha + pizza lado a lado -->
+            <!-- GRÁFICOS -->
             <div class="charts-home-grid">
-
-                <!-- Gráfico de Linhas -->
                 <div class="chart-section">
                     <div class="chart-header">
                         <h2>Evolução Financeira</h2>
@@ -111,25 +111,18 @@
                             <span class="legend-dot legend-dot--conjunto"></span>Conjunto
                         </div>
                     </div>
-                    <div class="chart-wrap">
-                        <canvas id="chartGeral"></canvas>
-                    </div>
+                    <div class="chart-wrap"><canvas id="chartGeral"></canvas></div>
                 </div>
-
-                <!-- Gráfico de Pizza -->
                 <div class="chart-section chart-section--pizza">
                     <div class="chart-header">
                         <h2>Distribuição de Gastos</h2>
                     </div>
-                    <div class="chart-wrap chart-wrap--pizza">
-                        <canvas id="chartPizza"></canvas>
-                    </div>
+                    <div class="chart-wrap chart-wrap--pizza"><canvas id="chartPizza"></canvas></div>
                     <div class="pizza-legend" id="pizzaLegend"></div>
                 </div>
-
             </div>
 
-            <!-- ÚLTIMOS GASTOS -->
+            <!-- LANÇAMENTOS RECENTES -->
             <div class="recent-section">
                 <h2>Lançamentos Recentes</h2>
                 <div id="listaRecente" class="lancamentos-list">
@@ -164,9 +157,7 @@
                     <div class="metric-value fun" id="g-boas">0</div>
                 </div>
             </div>
-            <div class="chart-wrap" style="margin:2rem 0">
-                <canvas id="chartGabriel"></canvas>
-            </div>
+            <div class="chart-wrap" style="margin:2rem 0"><canvas id="chartGabriel"></canvas></div>
             <h2 style="margin-bottom:1rem;font-family:var(--font-display);font-weight:700">Extrato</h2>
             <div id="extratoGabriel" class="lancamentos-list">
                 <p class="empty-state">Sem lançamentos para Gabriel.</p>
@@ -199,9 +190,7 @@
                     <div class="metric-value fun" id="gu-boas">0</div>
                 </div>
             </div>
-            <div class="chart-wrap" style="margin:2rem 0">
-                <canvas id="chartGustavo"></canvas>
-            </div>
+            <div class="chart-wrap" style="margin:2rem 0"><canvas id="chartGustavo"></canvas></div>
             <h2 style="margin-bottom:1rem;font-family:var(--font-display);font-weight:700">Extrato</h2>
             <div id="extratoGustavo" class="lancamentos-list">
                 <p class="empty-state">Sem lançamentos para Gustavo.</p>
@@ -230,9 +219,7 @@
                     <div class="metric-value" id="c-saldo">R$ 0,00</div>
                 </div>
             </div>
-            <div class="chart-wrap" style="margin:2rem 0">
-                <canvas id="chartConjunto"></canvas>
-            </div>
+            <div class="chart-wrap" style="margin:2rem 0"><canvas id="chartConjunto"></canvas></div>
             <h2 style="margin-bottom:1rem;font-family:var(--font-display);font-weight:700">Extrato</h2>
             <div id="extratoConjunto" class="lancamentos-list">
                 <p class="empty-state">Sem lançamentos conjuntos.</p>
@@ -240,7 +227,7 @@
         </div>
     </main>
 
-    <!-- ========== RANKING BOA ========== -->
+    <!-- ========== RANKING ========== -->
     <main id="page-ranking" class="page">
         <div class="container">
             <div class="page-title-row">
@@ -248,7 +235,6 @@
             </div>
             <p class="ranking-subtitle">Aqui conta quem mais tratou o outro. Não tem relação com o saldo — é só
                 reconhecimento mesmo 🍺</p>
-
             <div class="ranking-podium">
                 <div class="podium-card" id="podium-1">
                     <div class="podium-crown">👑</div>
@@ -262,14 +248,12 @@
                     <div class="podium-bar podium-bar--2"></div>
                 </div>
             </div>
-
             <div class="ranking-detalhe">
                 <h2>Detalhamento Mensal</h2>
                 <div id="rankingMensal" class="ranking-mensal-list">
                     <p class="empty-state">Nenhuma "boa" registrada ainda. Vai lá pagar uma rodada! 🍻</p>
                 </div>
             </div>
-
             <div class="ranking-historico">
                 <h2>Histórico de Boas</h2>
                 <div id="rankingHistorico" class="lancamentos-list">
@@ -279,9 +263,7 @@
         </div>
     </main>
 
-    <!-- TOAST -->
     <div class="toast" id="toast"></div>
-
     <script src="app.js"></script>
 </body>
 

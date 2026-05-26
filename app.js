@@ -1,6 +1,21 @@
 /* ============================================================
    DUPLA FINANCEIRA — app.js
+   Firebase Firestore (compat SDK) + tempo real
    ============================================================ */
+
+// ── FIREBASE CONFIG ────────────────────────────────────────
+const firebaseConfig = {
+    apiKey: "AIzaSyB_I-hV5qoik8evctBHSYJ6GZy3bAbtta8",
+    authDomain: "financeiro-olhos-dourados.firebaseapp.com",
+    projectId: "financeiro-olhos-dourados",
+    storageBucket: "financeiro-olhos-dourados.firebasestorage.app",
+    messagingSenderId: "982587536537",
+    appId: "1:982587536537:web:2acdc3a1a76aa798c5f408"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const lancamentosRef = db.collection('lancamentos');
 
 // ── STATE ──────────────────────────────────────────────────
 const STATE = {
@@ -8,19 +23,13 @@ const STATE = {
     metas: { gabriel: 3000, gustavo: 3000, conjunto: 5000 }
 };
 
-function loadState() {
-    try {
-        const saved = localStorage.getItem('duplaFinanceira');
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            STATE.lancamentos = parsed.lancamentos || [];
-            STATE.metas = parsed.metas || STATE.metas;
-        }
-    } catch (e) { }
-}
-
-function saveState() {
-    localStorage.setItem('duplaFinanceira', JSON.stringify(STATE));
+// ── SYNC BAR ───────────────────────────────────────────────
+function setSyncStatus(status, msg) {
+    const bar = document.getElementById('syncBar');
+    const dot = document.getElementById('syncDot');
+    const text = document.getElementById('syncMsg');
+    bar.className = 'sync-bar ' + status;
+    text.textContent = msg;
 }
 
 // ── HELPERS ────────────────────────────────────────────────
@@ -28,8 +37,7 @@ function fmt(val) {
     return 'R$ ' + Math.abs(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function fmtSigned(val) {
-    const sign = val >= 0 ? '+' : '-';
-    return sign + ' R$ ' + Math.abs(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (val >= 0 ? '+ ' : '- ') + 'R$ ' + Math.abs(val).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function mesLabel(dateStr) {
     if (!dateStr) return '—';
@@ -37,13 +45,8 @@ function mesLabel(dateStr) {
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     return months[parseInt(m, 10) - 1] + '/' + y.slice(2);
 }
-function mesKey(dateStr) {
-    if (!dateStr) return '';
-    return dateStr.slice(0, 7);
-}
-function today() {
-    return new Date().toISOString().slice(0, 10);
-}
+function mesKey(dateStr) { return dateStr ? dateStr.slice(0, 7) : ''; }
+function today() { return new Date().toISOString().slice(0, 10); }
 function showToast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg;
@@ -51,13 +54,9 @@ function showToast(msg) {
     setTimeout(() => t.classList.remove('show'), 2800);
 }
 function escapeHtml(str) {
-    return String(str)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-function capitalize(str) {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-}
+function capitalize(str) { return str.charAt(0).toUpperCase() + str.slice(1); }
 
 // ── HAMBÚRGUER ─────────────────────────────────────────────
 const hamburger = document.getElementById('hamburger');
@@ -69,13 +68,11 @@ function closeMobileMenu() {
     mobileMenu.classList.remove('open');
     mobileOverlay.classList.remove('open');
 }
-
 hamburger.addEventListener('click', () => {
-    const isOpen = mobileMenu.classList.toggle('open');
-    hamburger.classList.toggle('open', isOpen);
-    mobileOverlay.classList.toggle('open', isOpen);
+    const open = mobileMenu.classList.toggle('open');
+    hamburger.classList.toggle('open', open);
+    mobileOverlay.classList.toggle('open', open);
 });
-
 mobileOverlay.addEventListener('click', closeMobileMenu);
 
 // ── NAVIGATION ─────────────────────────────────────────────
@@ -89,7 +86,6 @@ function activateTab(tab) {
     pages.forEach(p => p.classList.toggle('active', p.id === 'page-' + tab));
     renderAll();
 }
-
 navBtns.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
 mobileNavBtns.forEach(btn => btn.addEventListener('click', () => {
     activateTab(btn.dataset.tab);
@@ -157,21 +153,20 @@ document.getElementById('btnAddCusto').addEventListener('click', () => {
     novaLinhaGasto();
     document.getElementById('modalOverlay').classList.add('open');
 });
-
 document.getElementById('btnAddLinha').addEventListener('click', novaLinhaGasto);
 
-function closeModal() {
-    document.getElementById('modalOverlay').classList.remove('open');
-}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
 document.getElementById('modalClose').addEventListener('click', closeModal);
 document.getElementById('btnCancelar').addEventListener('click', closeModal);
 document.getElementById('modalOverlay').addEventListener('click', e => {
     if (e.target === document.getElementById('modalOverlay')) closeModal();
 });
 
-document.getElementById('btnSalvar').addEventListener('click', () => {
+// ── SALVAR NO FIREBASE ─────────────────────────────────────
+document.getElementById('btnSalvar').addEventListener('click', async () => {
     const rows = document.querySelectorAll('.gasto-row');
-    let salvou = 0;
+    const novos = [];
+
     rows.forEach(row => {
         const id = row.id.replace('row-', '');
         const valor = parseFloat(document.getElementById('valor-' + id)?.value);
@@ -181,15 +176,63 @@ document.getElementById('btnSalvar').addEventListener('click', () => {
         const data = document.getElementById('data-' + id)?.value;
         const boa = document.getElementById('boa-' + id)?.checked;
         if (!valor || valor <= 0 || !desc) return;
-        STATE.lancamentos.push({ id: Date.now() + Math.random(), valor, tipo, desc, pessoa, data: data || today(), boa });
-        salvou++;
+        novos.push({ valor, tipo, desc, pessoa, data: data || today(), boa, criadoEm: firebase.firestore.FieldValue.serverTimestamp() });
     });
-    if (salvou === 0) { showToast('⚠️ Preencha pelo menos um lançamento válido'); return; }
-    saveState();
-    closeModal();
-    renderAll();
-    showToast('✅ ' + salvou + ' lançamento' + (salvou > 1 ? 's salvos' : ' salvo') + '!');
+
+    if (novos.length === 0) { showToast('⚠️ Preencha pelo menos um lançamento válido'); return; }
+
+    setSyncStatus('saving', 'Salvando…');
+    const btnSalvar = document.getElementById('btnSalvar');
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = 'Salvando…';
+
+    try {
+        // Usa batch para salvar múltiplos de uma vez (atômico)
+        const batch = db.batch();
+        novos.forEach(l => {
+            const ref = lancamentosRef.doc();
+            batch.set(ref, l);
+        });
+        await batch.commit();
+
+        closeModal();
+        showToast('✅ ' + novos.length + ' lançamento' + (novos.length > 1 ? 's salvos' : ' salvo') + '!');
+        // O onSnapshot vai atualizar o STATE automaticamente
+    } catch (err) {
+        console.error(err);
+        setSyncStatus('error', 'Erro ao salvar. Verifique sua conexão.');
+        showToast('❌ Erro ao salvar. Tente novamente.');
+    } finally {
+        btnSalvar.disabled = false;
+        btnSalvar.textContent = 'Salvar tudo';
+    }
 });
+
+// ── LISTENER EM TEMPO REAL ─────────────────────────────────
+// Fica escutando o Firestore — qualquer mudança (de qualquer dispositivo)
+// atualiza o STATE e re-renderiza a tela automaticamente
+function iniciarListener() {
+    setSyncStatus('', 'Conectando ao banco de dados…');
+
+    lancamentosRef
+        .orderBy('criadoEm', 'asc')
+        .onSnapshot(
+            snapshot => {
+                STATE.lancamentos = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    // Normaliza o timestamp para string de data legível
+                    data: doc.data().data || today()
+                }));
+                setSyncStatus('synced', 'Sincronizado · ' + STATE.lancamentos.length + ' lançamento' + (STATE.lancamentos.length !== 1 ? 's' : ''));
+                renderAll();
+            },
+            err => {
+                console.error('Firestore error:', err);
+                setSyncStatus('error', 'Sem conexão com o banco. Dados podem estar desatualizados.');
+            }
+        );
+}
 
 // ── CÁLCULOS ───────────────────────────────────────────────
 function calcSaldo(pessoa) {
@@ -220,40 +263,30 @@ function getMeses() {
 
 // ── CHARTS REGISTRY ────────────────────────────────────────
 const _charts = {};
-function destroyChart(id) {
-    if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; }
-}
+function destroyChart(id) { if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; } }
 function saveChart(id, inst) { _charts[id] = inst; }
 
 // ── RENDER HOME ────────────────────────────────────────────
 function renderHome() {
-    // Cards
     ['gabriel', 'gustavo', 'conjunto'].forEach(p => {
         const saldo = calcSaldo(p);
         const meta = STATE.metas[p] || 3000;
-        const key = p.charAt(0).toUpperCase() + p.slice(1);
-
+        const key = capitalize(p);
         document.getElementById('saldo' + key).textContent = fmt(saldo);
-
         const statusEl = document.getElementById('status' + key);
         if (saldo > 0) { statusEl.textContent = '↑ Positivo'; statusEl.className = 'dash-card-status status-positivo'; }
         else if (saldo < 0) { statusEl.textContent = '↓ Negativo'; statusEl.className = 'dash-card-status status-negativo'; }
         else { statusEl.textContent = 'Zerado'; statusEl.className = 'dash-card-status status-neutro'; }
-
         const pct = Math.min(100, Math.max(0, Math.round((calcEntradas(p) / meta) * 100)));
         document.getElementById('meta' + key).textContent = 'Meta: ' + pct + '% atingida';
     });
 
-    // Lista recente
     const recentes = [...STATE.lancamentos].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 10);
     renderLancamentos(document.getElementById('listaRecente'), recentes);
-
-    // Gráficos
     renderChartGeral();
     renderChartPizza();
 }
 
-// Gráfico de Linhas
 function renderChartGeral() {
     const ctx = document.getElementById('chartGeral');
     if (!ctx) return;
@@ -270,17 +303,12 @@ function renderChartGeral() {
             labels: meses.map(m => mesLabel(m + '-01')),
             datasets: defs.map(d => ({
                 label: d.label,
-                data: meses.map(m => {
-                    return STATE.lancamentos
-                        .filter(l => l.pessoa === d.pessoa && mesKey(l.data) === m)
-                        .reduce((acc, l) => l.tipo === 'entrada' ? acc + l.valor : acc - l.valor, 0);
-                }),
+                data: meses.map(m => STATE.lancamentos
+                    .filter(l => l.pessoa === d.pessoa && mesKey(l.data) === m)
+                    .reduce((acc, l) => l.tipo === 'entrada' ? acc + l.valor : acc - l.valor, 0)),
                 borderColor: d.color,
                 backgroundColor: d.color + '20',
-                fill: true,
-                tension: 0.4,
-                pointRadius: 4,
-                pointBackgroundColor: d.color
+                fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: d.color
             }))
         },
         options: {
@@ -294,72 +322,50 @@ function renderChartGeral() {
     }));
 }
 
-// Gráfico de Pizza
 function renderChartPizza() {
     const ctx = document.getElementById('chartPizza');
     const legendEl = document.getElementById('pizzaLegend');
     if (!ctx || !legendEl) return;
     destroyChart('pizza');
 
-    const gastosGabriel = calcGastos('gabriel');
-    const gastosGustavo = calcGastos('gustavo');
-    const gastosConjunto = calcGastos('conjunto');
-    const total = gastosGabriel + gastosGustavo + gastosConjunto;
+    const gastosG = calcGastos('gabriel');
+    const gastosU = calcGastos('gustavo');
+    const gastosC = calcGastos('conjunto');
+    const total = gastosG + gastosU + gastosC;
 
     if (total === 0) {
         legendEl.innerHTML = '<p class="pizza-empty">Nenhum gasto registrado ainda.</p>';
         ctx.style.display = 'none';
         return;
     }
-
     ctx.style.display = '';
 
     const labels = ['Gabriel', 'Gustavo', 'Conjunto'];
-    const dados = [gastosGabriel, gastosGustavo, gastosConjunto];
+    const dados = [gastosG, gastosU, gastosC];
     const cores = ['#1a6cf6', '#e0471d', '#0f9e6e'];
 
     saveChart('pizza', new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels,
-            datasets: [{
-                data: dados,
-                backgroundColor: cores.map(c => c + 'cc'),
-                borderColor: cores,
-                borderWidth: 2,
-                hoverOffset: 8
-            }]
+            datasets: [{ data: dados, backgroundColor: cores.map(c => c + 'cc'), borderColor: cores, borderWidth: 2, hoverOffset: 8 }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '62%',
+            responsive: true, maintainAspectRatio: false, cutout: '62%',
             plugins: {
                 legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => {
-                            const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
-                            return ' ' + fmt(ctx.raw) + ' (' + pct + '%)';
-                        }
-                    }
-                }
+                tooltip: { callbacks: { label: ctx => ' ' + fmt(ctx.raw) + ' (' + ((ctx.raw / total) * 100).toFixed(1) + '%)' } }
             }
         }
     }));
 
-    // Legenda customizada
     legendEl.innerHTML = labels.map((l, i) => {
-        const pct = total > 0 ? ((dados[i] / total) * 100).toFixed(1) : 0;
         if (dados[i] === 0) return '';
-        return `
-      <div class="pizza-legend-item">
-        <div class="pizza-legend-left">
-          <span class="pizza-dot" style="background:${cores[i]}"></span>
-          <span>${l}</span>
-        </div>
-        <span class="pizza-legend-val">${fmt(dados[i])} <span style="color:var(--clr-muted);font-weight:400">(${pct}%)</span></span>
-      </div>`;
+        const pct = ((dados[i] / total) * 100).toFixed(1);
+        return `<div class="pizza-legend-item">
+      <div class="pizza-legend-left"><span class="pizza-dot" style="background:${cores[i]}"></span><span>${l}</span></div>
+      <span class="pizza-legend-val">${fmt(dados[i])} <span style="color:var(--clr-muted);font-weight:400">(${pct}%)</span></span>
+    </div>`;
     }).filter(Boolean).join('');
 }
 
@@ -376,16 +382,11 @@ function renderPessoa(pessoa) {
     const saldoEl = document.getElementById(pfx + '-saldo');
     saldoEl.textContent = fmt(saldo);
     saldoEl.className = 'metric-value ' + (saldo >= 0 ? 'green' : 'red');
-    if (pfx !== 'c') {
-        document.getElementById(pfx + '-boas').textContent = boas + (boas === 1 ? ' boa' : ' boas');
-    }
+    if (pfx !== 'c') document.getElementById(pfx + '-boas').textContent = boas + (boas === 1 ? ' boa' : ' boas');
 
-    // extrato
     const extratoEl = document.getElementById('extrato' + capitalize(pessoa));
-    const lancs = STATE.lancamentos.filter(l => l.pessoa === pessoa).sort((a, b) => b.data.localeCompare(a.data));
-    renderLancamentos(extratoEl, lancs);
+    renderLancamentos(extratoEl, STATE.lancamentos.filter(l => l.pessoa === pessoa).sort((a, b) => b.data.localeCompare(a.data)));
 
-    // chart barras
     const meses = getMeses();
     const color = pessoa === 'gabriel' ? '#1a6cf6' : pessoa === 'gustavo' ? '#e0471d' : '#0f9e6e';
     const canvasId = 'chart' + capitalize(pessoa);
@@ -397,16 +398,8 @@ function renderPessoa(pessoa) {
         data: {
             labels: meses.map(m => mesLabel(m + '-01')),
             datasets: [
-                {
-                    label: 'Entradas',
-                    data: meses.map(m => STATE.lancamentos.filter(l => l.pessoa === pessoa && mesKey(l.data) === m && l.tipo === 'entrada').reduce((a, l) => a + l.valor, 0)),
-                    backgroundColor: color + '55', borderColor: color, borderWidth: 2
-                },
-                {
-                    label: 'Gastos',
-                    data: meses.map(m => STATE.lancamentos.filter(l => l.pessoa === pessoa && mesKey(l.data) === m && l.tipo === 'gasto').reduce((a, l) => a + l.valor, 0)),
-                    backgroundColor: '#e0471d33', borderColor: '#e0471d', borderWidth: 2
-                }
+                { label: 'Entradas', data: meses.map(m => STATE.lancamentos.filter(l => l.pessoa === pessoa && mesKey(l.data) === m && l.tipo === 'entrada').reduce((a, l) => a + l.valor, 0)), backgroundColor: color + '55', borderColor: color, borderWidth: 2 },
+                { label: 'Gastos', data: meses.map(m => STATE.lancamentos.filter(l => l.pessoa === pessoa && mesKey(l.data) === m && l.tipo === 'gasto').reduce((a, l) => a + l.valor, 0)), backgroundColor: '#e0471d33', borderColor: '#e0471d', borderWidth: 2 }
             ]
         },
         options: {
@@ -423,10 +416,7 @@ function renderPessoa(pessoa) {
 // ── RENDER LANÇAMENTOS ─────────────────────────────────────
 function renderLancamentos(container, lancs) {
     if (!container) return;
-    if (!lancs.length) {
-        container.innerHTML = '<p class="empty-state">Nenhum lançamento ainda.</p>';
-        return;
-    }
+    if (!lancs.length) { container.innerHTML = '<p class="empty-state">Nenhum lançamento ainda.</p>'; return; }
     const avatarMap = {
         gabriel: { cls: 'avatar-gabriel', initials: 'GB' },
         gustavo: { cls: 'avatar-gustavo', initials: 'GU' },
@@ -437,31 +427,27 @@ function renderLancamentos(container, lancs) {
         const valClass = l.tipo === 'entrada' ? 'entrada' : 'gasto';
         const valSign = l.tipo === 'entrada' ? '+' : '-';
         const boaBadge = l.boa ? '<span class="lanc-boa-badge">🍺 boa</span>' : '';
-        return `
-      <div class="lancamento-item">
-        <div class="lanc-left">
-          <div class="lanc-avatar ${av.cls}">${av.initials}</div>
-          <div class="lanc-info">
-            <div class="lanc-desc">${escapeHtml(l.desc)}</div>
-            <div class="lanc-meta">${l.data} · ${capitalize(l.pessoa)}</div>
-          </div>
+        return `<div class="lancamento-item">
+      <div class="lanc-left">
+        <div class="lanc-avatar ${av.cls}">${av.initials}</div>
+        <div class="lanc-info">
+          <div class="lanc-desc">${escapeHtml(l.desc)}</div>
+          <div class="lanc-meta">${l.data} · ${capitalize(l.pessoa)}</div>
         </div>
-        <div class="lanc-right">
-          <span class="lanc-valor ${valClass}">${valSign} ${fmt(l.valor)}</span>
-          ${boaBadge}
-        </div>
-      </div>`;
+      </div>
+      <div class="lanc-right">
+        <span class="lanc-valor ${valClass}">${valSign} ${fmt(l.valor)}</span>
+        ${boaBadge}
+      </div>
+    </div>`;
     }).join('');
 }
 
 // ── RENDER RANKING ─────────────────────────────────────────
 function renderRanking() {
-    const boasGabriel = calcBoas('gabriel');
-    const boasGustavo = calcBoas('gustavo');
-    const sorted = [
-        { nome: 'Gabriel', count: boasGabriel },
-        { nome: 'Gustavo', count: boasGustavo }
-    ].sort((a, b) => b.count - a.count);
+    const boasG = calcBoas('gabriel');
+    const boasU = calcBoas('gustavo');
+    const sorted = [{ nome: 'Gabriel', count: boasG }, { nome: 'Gustavo', count: boasU }].sort((a, b) => b.count - a.count);
 
     document.getElementById('rank1-nome').textContent = sorted[0].nome;
     document.getElementById('rank1-count').textContent = sorted[0].count + (sorted[0].count === 1 ? ' boa' : ' boas');
@@ -470,7 +456,7 @@ function renderRanking() {
 
     const meses = getMeses();
     const mensalEl = document.getElementById('rankingMensal');
-    if (!meses.length || (boasGabriel + boasGustavo === 0)) {
+    if (!meses.length || (boasG + boasU === 0)) {
         mensalEl.innerHTML = '<p class="empty-state">Nenhuma "boa" registrada ainda. Vai lá pagar uma rodada! 🍻</p>';
     } else {
         const rows = [...meses].reverse().map(m => {
@@ -478,21 +464,20 @@ function renderRanking() {
             const gus = STATE.lancamentos.filter(l => l.boa && l.pessoa === 'gustavo' && mesKey(l.data) === m).length;
             if (gab + gus === 0) return '';
             const winner = gab > gus ? 'Gabriel' : gus > gab ? 'Gustavo' : 'Empate';
-            return `
-        <div class="mes-card">
-          <span class="mes-label">${mesLabel(m + '-01')}</span>
-          <div class="mes-bar-wrap">
-            <span class="mes-bar-item"><span class="mes-dot mes-dot-gabriel"></span>Gabriel: ${gab}</span>
-            <span class="mes-bar-item"><span class="mes-dot mes-dot-gustavo"></span>Gustavo: ${gus}</span>
-          </div>
-          <span class="mes-winner-badge">${winner === 'Empate' ? '🤝 Empate' : '🏆 ' + winner}</span>
-        </div>`;
+            return `<div class="mes-card">
+        <span class="mes-label">${mesLabel(m + '-01')}</span>
+        <div class="mes-bar-wrap">
+          <span class="mes-bar-item"><span class="mes-dot mes-dot-gabriel"></span>Gabriel: ${gab}</span>
+          <span class="mes-bar-item"><span class="mes-dot mes-dot-gustavo"></span>Gustavo: ${gus}</span>
+        </div>
+        <span class="mes-winner-badge">${winner === 'Empate' ? '🤝 Empate' : '🏆 ' + winner}</span>
+      </div>`;
         }).filter(Boolean).join('');
         mensalEl.innerHTML = rows || '<p class="empty-state">Nenhuma boa nesse período.</p>';
     }
 
-    const boas = STATE.lancamentos.filter(l => l.boa).sort((a, b) => b.data.localeCompare(a.data));
-    renderLancamentos(document.getElementById('rankingHistorico'), boas);
+    renderLancamentos(document.getElementById('rankingHistorico'),
+        STATE.lancamentos.filter(l => l.boa).sort((a, b) => b.data.localeCompare(a.data)));
 }
 
 // ── RENDER ALL ─────────────────────────────────────────────
@@ -508,5 +493,4 @@ function renderAll() {
 }
 
 // ── INIT ───────────────────────────────────────────────────
-loadState();
-renderAll();
+iniciarListener();
